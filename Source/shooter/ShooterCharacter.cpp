@@ -4,6 +4,13 @@
 #include "ShooterCharacter.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "camera/CameraComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundCue.h"
+#include "Engine/SkeletalMeshSocket.h"
+#include "DrawDebugHelpers.h"
+#include "Particles/ParticleSystemComponent.h"
+
 
 
 // Sets default values
@@ -17,19 +24,29 @@ AShooterCharacter::AShooterCharacter():
 	CameraBoom-> SetupAttachment(RootComponent);
 	CameraBoom-> TargetArmLength=300.f;//the camera follows at this distance behind the character
 	CameraBoom-> bUsePawnControlRotation =true;//rotate the arm based on the controller
+	CameraBoom->SocketOffset = FVector(0.f, 50.f, 50.f);
+
 	//create the follow camera
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera -> SetupAttachment(CameraBoom, USpringArmComponent::SocketName);//Attach the camera to the end of the boom
 	FollowCamera -> bUsePawnControlRotation = false;//camera doesn't rotate relative to arm
 
+	//don't rotate when the controller rote(controller only affect the camera now)
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = true;
+	bUseControllerRotationRoll = false;
+
+	//configure character movement
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	GetCharacterMovement()->RotationRate = FRotator(0.f,540.f,0.f);
+	GetCharacterMovement()->AirControl=0.2f;
+	GetCharacterMovement()->JumpZVelocity= 600.f;
 }
 
 // Called when the game starts or when spawned
 void AShooterCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
-	UE_LOG(LogTemp, Warning, TEXT("Some warning message!"));
 }
 
 void AShooterCharacter::MoveForward(float Value)
@@ -69,6 +86,74 @@ void AShooterCharacter::LookUpAtRate(float Rate)
 	AddControllerPitchInput(Rate * BaseLookUpRate * GetWorld()->GetDeltaSeconds());
 }
 
+void AShooterCharacter::FireWeapon()
+{
+	if (FireSound)
+	{
+		UGameplayStatics::PlaySound2D(this, FireSound);
+	}
+	const USkeletalMeshSocket*BarrelSocket =GetMesh()->GetSocketByName("BarrelSocket");
+	if (BarrelSocket) {
+		const FTransform SocketTransform = BarrelSocket->GetSocketTransform(GetMesh());
+
+		if (MuzzelFlash)
+		{
+			UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzelFlash, SocketTransform);
+		}
+
+		FVector2D ViewportSize;
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(ViewportSize);
+		}
+
+		FVector2D CrosshairLocation(ViewportSize.X / 2.f, ViewportSize.Y / 2.f);
+		CrosshairLocation.Y -= 35.f;
+		FVector CrosshairWorldPosition;
+		FVector CrosshairWorldDirection;
+		bool bScreenToWorld = UGameplayStatics::DeprojectScreenToWorld(UGameplayStatics::GetPlayerController(this, 0), CrosshairLocation, CrosshairWorldPosition, CrosshairWorldDirection);
+
+
+
+			
+		/*
+		FHitResult FireHit;
+		const FVector Start{ SocketTransform.GetLocation() };
+		const FQuat Rotation{ SocketTransform.GetRotation()};
+		const FVector RotationAxis{ Rotation.GetAxisX() };
+		const FVector End{ Start + RotationAxis * 50'000.f };
+		FVector BeamEndPoint{ End };
+		GetWorld()->LineTraceSingleByChannel(FireHit, Start, End,ECollisionChannel::ECC_Visibility);
+		if (FireHit.bBlockingHit)
+		{
+			// DrawDebugLine(GetWorld(), Start, End, FColor::Red,false,2.f);
+			// DrawDebugPoint(GetWorld(), FireHit.Location, 5.f, FColor::Red, false, 2.f);
+			BeamEndPoint = FireHit.Location;
+			if (ImpactParticles)
+			{
+				UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ImpactParticles,FireHit.Location);
+			}
+		}
+		if (BeamParticles)
+		{
+			UParticleSystemComponent* Beam = UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), BeamParticles, SocketTransform);
+			if (Beam)
+			{
+				Beam->SetVectorParameter(FName("Target"), BeamEndPoint);
+			}
+		}
+		*/
+
+	}
+	UAnimInstance* AnimeInstance = GetMesh()->GetAnimInstance();
+	if (AnimeInstance&&HipFireMontage)
+	{
+		AnimeInstance->Montage_Play(HipFireMontage);
+		AnimeInstance->Montage_JumpToSection(FName("Startfire"));
+	}
+
+}
+
 // Called every frame
 void AShooterCharacter::Tick(float DeltaTime)
 {
@@ -91,6 +176,8 @@ void AShooterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 	PlayerInputComponent->BindAction("Jump",IE_Pressed,this,&ACharacter::Jump);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
+
+	PlayerInputComponent->BindAction("FireButton", IE_Pressed, this, &AShooterCharacter::FireWeapon);
 
 
 }

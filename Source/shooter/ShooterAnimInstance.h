@@ -30,4 +30,7 @@ class SHOOTER_API UShooterAnimInstance : public UAnimInstance
 		
 		UPROPERTY(VisibleAnyWhere, BlueprintReadOnly, category = Movement, meta = (AllowPrivateAccess = "true"))
 		bool  bIsAccelerating;
+
+		UPROPERTY(EditAnyWhere, BlueprintReadWrite, Category = Movement, meta = (AllowPrivateAccess = "true"))
+		float MovementOffsetYaw;
 };
